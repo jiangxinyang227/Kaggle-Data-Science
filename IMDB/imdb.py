@@ -7,8 +7,7 @@ import pandas as pd
 from gensim.models import word2vec, Word2Vec
 from sklearn.ensemble import RandomForestClassifier
 
-
-tokenizer = nltk.data.load("tokenizers/punkt/english.pickle")
+SENTENCE_LIMIT_SIZE = 120
 num_features = 300
 min_word_count = 40
 num_workers = 4
@@ -53,7 +52,7 @@ def reviewToSentences(review):
     :param tokenizer:
     :return:
     """
-    raw_sentences = tokenizer.tokenize(review.strip())
+    raw_sentences = review.strip().split(',')
     sentences = []
     for raw_sentence in raw_sentences:
         if len(raw_sentence) > 0:
@@ -80,6 +79,13 @@ def saveModel():
 
 
 def makeFeatureVec(words, model, num_features):
+    """
+
+    :param words:
+    :param model:
+    :param num_features: 词向量的大小
+    :return:
+    """
     featureVec = np.zeros((num_features,), dtype="float32")
     nwords = 0
     index2wordSet = set(model.index2word)
@@ -92,6 +98,13 @@ def makeFeatureVec(words, model, num_features):
 
 
 def getAvgFeatureVecs(reviews, model, num_features):
+    """
+
+    :param reviews:
+    :param model:
+    :param num_features:
+    :return:
+    """
     counter = 0
     reviewFeatureVecs = np.zeros((len(reviews), num_features), dtype="float32")
     for review in reviews:
@@ -122,3 +135,7 @@ def main():
     result = classifier.predict(testDataVecs)
     output = pd.DataFrame(data={"id": test['id'], "sentiment": result})
     output.to_csv("./data/Word2Vec_AverageVectors.csv", index=False, quoting=3)
+
+
+saveModel()
+main()
