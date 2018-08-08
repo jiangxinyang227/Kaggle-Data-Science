@@ -2,6 +2,7 @@ import pandas as pd
 import time
 import numpy as np
 import lightgbm as lgb
+import xgboost as xgb
 
 
 def load():
@@ -38,9 +39,14 @@ def predispose(x_train):
         rename(index=str, columns={"channel": 'ip_app_os_count'})
     x_train = x_train.merge(gp, on=['ip', 'app', 'os'], how='left')
 
+    gb = x_train[['device', 'os', 'channel']].groupby(by=['device', 'os'])[['channel']].count().reset_index().\
+        rename(index=str, columns={"channel": "device_os_count"})
+    x_train = x_train.merge(gb, on=['device', 'os'], how='left')
+
     x_train['qty'] = x_train['qty'].astype('uint16')
     x_train['ip_app_count'] = x_train['ip_app_count'].astype('uint16')
     x_train['ip_app_os_count'] = x_train['ip_app_os_count'].astype('uint16')
+    x_train['device_os_count'] = x_train['device_os_count'].astype('unit16')
 
     x_val = x_train[:1000000]
     x_train = x_train[1000000:]
@@ -89,7 +95,7 @@ def lgb_modelfit_nocv(params, dtrain, dvalid, predictors, target='target', objec
     bst1 = lgb.train(lgb_params,
                      xgtrain,
                      valid_sets=[xgtrain, xgvalid],
-                     valid_names=['train','valid'],
+                     valid_names=['train', 'valid'],
                      evals_result=evals_results,
                      num_boost_round=num_boost_round,
                      early_stopping_rounds=early_stopping_rounds,
