@@ -7,7 +7,7 @@ from scipy.stats import skew
 from scipy.special import boxcox1p
 
 from sklearn.preprocessing import LabelEncoder
-from sklearn.linear_model import ElasticNet, Lasso, BayesianRidge, LassoLarsIC
+from sklearn.linear_model import ElasticNet, Lasso, BayesianRidge, LassoLarsIC, Ridge
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.kernel_ridge import KernelRidge
 from sklearn.pipeline import make_pipeline
@@ -18,6 +18,7 @@ from sklearn.metrics import mean_squared_error
 import lightgbm as lgb
 from sklearn.svm import SVR
 from mlxtend.regressor import StackingRegressor
+from sklearn.model_selection import GridSearchCV
 
 
 warnings.filterwarnings('ignore')
@@ -112,7 +113,7 @@ def transformStr(dataSet):
 
 def transformSortNum(dataSet):
     """
-    将类别型特征中的值转换成序列型数字
+    将类别型特征中的值转换成序列型数字, 例如["jiang", "zhang", "jiang"] -> [0, 1, 0]
     :param dataSet:
     :return:
     """
@@ -141,6 +142,11 @@ def extractFeat(dataSet):
 
 
 def boxCoxFeat(dataSet):
+    """
+    skew大于0.75的将数值型特征都进行box-cox变换成服从正态分布的特征
+    :param dataSet:
+    :return:
+    """
     numericalFeat = dataSet.dtypes[dataSet.dtypes != 'object'].index
 
     skewed_feats = dataSet[numericalFeat].apply(lambda x: skew(x.dropna())).sort_values(ascending=False)
@@ -176,7 +182,7 @@ def train(trainX, trainY, model):
     :param model:
     :return:
     """
-    # trainData, validateData, trainLabels, validateLabels = train_test_split(trainX, trainY, test_size=0.2)
+    # trainData, validateData, trainLabels, validateLabels = train_test_split(trainX, trainY, test_size=0.2, random_state=0)
     # model.fit(trainData, trainLabels)
     #
     # scores = model.score(validateData, validateLabels)
@@ -227,45 +233,50 @@ def main():
     testX = dataSet[ntrain:]
 
     models = {
-        "lgd": lgb.LGBMRegressor(objective='regression', num_leaves=5,
-                                 learning_rate=0.05, n_estimators=720,
-                                 max_bin=55, bagging_fraction=0.8,
-                                 bagging_freq=5, feature_fraction=0.2319,
-                                 feature_fraction_seed=9, bagging_seed=9,
-                                 min_data_in_leaf=6, min_sum_hessian_in_leaf=11),
+        # "lgd": lgb.LGBMRegressor(objective='regression', num_leaves=5,
+        #                          learning_rate=0.05, n_estimators=720,
+        #                          max_bin=55, bagging_fraction=0.8,
+        #                          bagging_freq=5, feature_fraction=0.2319,
+        #                          feature_fraction_seed=9, bagging_seed=9,
+        #                          min_data_in_leaf=6, min_sum_hessian_in_leaf=11),
 
-        'gbdt': GradientBoostingRegressor(n_estimators=3000, learning_rate=0.05,
+        'gbdt': GradientBoostingRegressor(n_estimators=2000, learning_rate=0.01,
                                           max_depth=4, max_features='sqrt',
-                                          min_samples_leaf=15, min_samples_split=10,
-                                          loss='huber', random_state=5),
+                                          min_samples_leaf=15, min_samples_split=12,
+                                          loss='huber', random_state=0),
+        "ridge": Ridge(alpha=0.05, max_iter=100),
 
         'krr': KernelRidge(alpha=0.6, kernel='polynomial', degree=2, coef0=2.5),
 
-        'enet': make_pipeline(RobustScaler(), ElasticNet(alpha=0.0005, l1_ratio=.9, random_state=3)),
+        'enet': ElasticNet(alpha=0.0005, l1_ratio=1, random_state=3),
 
-        'lasso': make_pipeline(RobustScaler(), Lasso(alpha=0.0005, random_state=1)),
+        'lasso': Lasso(alpha=0.0008, max_iter=100, random_state=1),
 
     }
     stackReg = StackingRegressor(regressors=[models['gbdt'], models['krr'], models['enet']], meta_regressor=models['lasso'])
-    modelStack1 = StackingAverageModels(base_models=(models['gbdt'], models['krr'], models['enet']),
-                                       meta_model=models['lasso'])
+    modelStack1 = StackingAverageModels(base_models=(models['ridge'], models['krr'], models['enet']),
+                                        meta_model=models['lasso'])
 
-    # modelStack2 = StackingAverageModels(base_models=(models['gbdt'], models['krr'], models['lasso']),
-    #                                    meta_model=models['enet'])
-    #
-    # modelStack3 = StackingAverageModels(base_models=(models['gbdt'], models['lasso'], models['enet']),
-    #                                    meta_model=models['krr'])
-    #
-    # modelStack4 = StackingAverageModels(base_models=(models['lasso'], models['krr'], models['enet']),
-    #                                    meta_model=models['gbdt'])
-    #
-    # averageModel = AveragingModels((modelStack1, modelStack2, modelStack3, modelStack4))
+    modelStack2 = StackingAverageModels(base_models=(models['gbdt'], models['ridge'], models['krr'], models['lasso']),
+                                        meta_model=models['enet'])
+
+    modelStack3 = StackingAverageModels(base_models=(models['gbdt'], models['lasso'], models['enet']),
+                                        meta_model=models['krr'])
+
+    modelStack4 = StackingAverageModels(base_models=(models['lasso'], models['krr'], models['enet']),
+                                        meta_model=models['gbdt'])
+
+    averageModel = AveragingModels((modelStack1, modelStack2, modelStack3, modelStack4))
     # for key in models:
     #     scores, reg = train(trainX, trainY, models[key])
     #
     #     print('model: {}   scores: {}'.format(key, scores))
 
-    scores, reg = train(trainX.values, trainY.values, stackReg)
+    # parameters = {"n_estimators": [500], "min_samples_split": [12, 15], "min_samples_leaf": [12, 15],
+    #                 "max_depth": [4, 6], "random_state": [0]}
+    # clf = GridSearchCV(models['gbdt'], parameters)
+
+    scores, reg = train(trainX.values, trainY.values, modelStack2)
     test(testX.values, testId, reg)
     print(scores)
 
@@ -308,7 +319,7 @@ class StackingAverageModels(BaseEstimator, RegressorMixin, TransformerMixin):
     """
     自定义stacking模型类，用于堆砌其他的模型成为一个新的模型，目的在于集中每个模型的有点
     """
-    def __init__(self, base_models: tuple, meta_model, n_folds=5):
+    def __init__(self, base_models: tuple, meta_model, n_folds=10):
         self.base_models = base_models  # 用于对训练集和测试集输出新的特征的模型
         self.meta_model = meta_model  # 用于对提取出的特征做预测过
         self.n_folds = n_folds
