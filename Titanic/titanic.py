@@ -12,6 +12,7 @@ from sklearn.ensemble import (RandomForestClassifier, GradientBoostingClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin, clone
 from mlxtend.classifier import StackingClassifier
+from sklearn.model_selection import GridSearchCV
 
 
 def loadData():
@@ -202,12 +203,12 @@ def train(data_train, clf):
     trainX = data_train.drop(['PassengerId', 'Survived'], axis=1)
     trainY = data_train['Survived']
 
-    trainX, validX, trainY, validY = train_test_split(trainX, trainY, test_size=0.1, random_state=0)
+    trainX, validX, trainY, validY = train_test_split(trainX, trainY, test_size=0.3, random_state=0)
 
     clf.fit(trainX.values, trainY.values)
     scores = clf.score(validX.values, validY.values)
-
-    return scores, clf
+    print(scores)
+    return clf
 
 
 def test(data_test, clf):
@@ -236,27 +237,31 @@ def main():
         'KNN': KNeighborsClassifier(n_neighbors=9),
         'LinearSvc': LinearSVC(max_iter=250, penalty='l2', C=0.5),
         'decisionTree': DecisionTreeClassifier(max_depth=4),
-        'randomTree': RandomForestClassifier(n_estimators=1000, n_jobs=-1, min_samples_leaf=2,
-                                             random_state=0),
+
+        'randomTree': RandomForestClassifier(n_estimators=100, max_depth=3, max_features=4,
+                                             min_samples_leaf=20, random_state=0),
         'gbdt': GradientBoostingClassifier(n_estimators=500, max_depth=3, learning_rate=0.1, random_state=0),
         'adaboost': AdaBoostClassifier(n_estimators=300, learning_rate=0.75, random_state=0),
         'extract': ExtraTreesClassifier(n_estimators=250, n_jobs=-1, max_depth=5, random_state=0),
         'gnb': GaussianNB(),
     }
 
-    # stackModel = StackingClassifier(classifiers=[models['decisionTree'],
-    #                                                 models['gbdt'], models['adaboost'],
-    #                                                 models['extract']],
-    #                                    meta_classifier=models['randomTree'])
+    stackModel = StackingClassifier(classifiers=[models['decisionTree'],
+                                                    models['gbdt'], models['adaboost'],
+                                                    models['extract']],
+                                    meta_classifier=models['randomTree'])
 
     # for key in models:
     #     scores, clf = train(data_train, models[key])
     #
     #     print("model: {0}   scores: {1}".format(key, scores))
     # clf = SVC(max_iter=200, kernel='rbf', gamma=0.5, C=5)
-    scores, clf = train(data_train, models['KNN'])
+
+    # parameters = {"n_estimators": [200, 500, 800, 1000], 'min_samples_leaf': [2, 4, 6],
+    #               "max_depth": [3, 5, 8], "random_state": [0]}
+    # clf = GridSearchCV(models['randomTree'], parameters)
+    clf = train(data_train, models['randomTree'])
     test(data_test, clf)
-    print(scores)
 
 
 class StackingAverageModels(BaseEstimator, ClassifierMixin, TransformerMixin):
