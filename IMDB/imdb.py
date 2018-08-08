@@ -70,7 +70,7 @@ def saveModel():
 
     for review in unlabeledTrain['review']:
         sentences += reviewToSentences(review)
-
+        
     model = word2vec.Word2Vec(sentences, workers=num_workers, size=num_features, min_count=min_word_count,
                               window=context, sample=downsampling)
     model.init_sims(replace=True)
